@@ -3,11 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>BitRate • Live Bitcoin Price Converter (BTC & Sats)</title>
-  <meta name="description" content="Instantly convert Bitcoin (BTC) or Satoshis (sats) to USD, EUR, GBP and 30+ fiat currencies. Live rates, no ads."/>
+  <title>BitRate • Live Bitcoin to Fiat Converter</title>
+  <meta name="description" content="Instant Bitcoin ↔ Sats converter with live prices in USD, EUR, GBP and 15+ currencies."/>
 
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>₿</text></svg>">
-
+  <link rel="icon"stylesheet" href="data:text/css;base64,"/> <!-- dummy to force latest CSS -->
   <style>
     :root {
       --bg: #0f0f17;
@@ -16,9 +15,10 @@
       --accent: #f7931a;
       --accent-dark: #d97706;
     }
+    * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-family: system-ui, sans-serif;
       background: var(--bg);
       color: var(--text);
       min-height: 100vh;
@@ -33,15 +33,14 @@
       border-radius: 24px;
       box-shadow: 0 25px 50px rgba(0,0,0,0.6);
       width: 100%;
-      max-width: 580px;           /* ← Much wider, fits all text */
-      margin: 0 auto;           /* ← Guarantees perfect centering */
+      max-width: 600px;
     }
     h1 {
       text-align: center;
       margin: 0 0 2rem;
       color: var(--accent);
-      font-size: 2.5rem;
-      font-weight: 700;
+      font-size: 2.6rem;
+      font-weight: 800;
     }
     .converter {
       display: grid;
@@ -55,9 +54,8 @@
       gap: 0.6rem;
     }
     label {
-      font-size: 1rem;
-      opacity: 0.9;
       font-weight: 500;
+      opacity: 0.9;
     }
     input, select {
       padding: 1rem 1.2rem;
@@ -66,3 +64,150 @@
       border-radius: 14px;
       background: #222233;
       color: white;
+    }
+    input { text-align: right; font-weight: 600; }
+    input::placeholder { color: #666; }
+    input:focus, select:focus { outline: 3px solid var(--accent); }
+    .swap {
+      width: 56px;
+      height: 56px;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 50%;
+      font-size: 1.8rem;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+    .swap:hover {
+      background: var(--accent-dark);
+      transform: rotate(180deg) scale(1.1);
+    }
+    .sats-note {
+      text-align: center;
+      margin-top: 1.2rem;
+      opacity: 0.8;
+      font-size: 0.95rem;
+    }
+    footer {
+      text-align: center;
+      margin-top: 2rem;
+      opacity: 0.7;
+      font-size: 0.9rem;
+    }
+    footer a { color: var(--accent); }
+
+    /* Mobile layout */
+    @media (max-width: 640px) {
+      .converter {
+        grid-template-columns: 1fr;
+      }
+      .swap {
+        transform: rotate(90deg);
+        margin: 1rem auto;
+      }
+      h1 { font-size: 2.3rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <h1>BitRate</h1>
+
+    <div class="converter">
+      <div class="input-group">
+        <label id="leftLabel">You send</label>
+        <input type="number" id="cryptoAmount" value="100000" step="any" min="0"/>
+        <select id="cryptoUnit">
+          <option value="btc">BTC (Bitcoin)</option>
+          <option value="sats" selected>Sats (satoshis)</option>
+        </select>
+      </div>
+
+      <button class="swap" id="swapBtn" aria-label="Swap">Swap</button>
+
+      <div class="input-group">
+        <label id="rightLabel">You receive</label>
+        <input type="text" id="fiatAmount" readonly placeholder="0.00"/>
+        <select id="fiatCurrency">
+          <option value="USD">USD – US Dollar</option>
+          <option value="EUR">EUR – Euro</option>
+          <option value="GBP" selected>GBP – British Pound</option>
+          <option value="CAD">CAD – Canadian Dollar</option>
+          <option value="AUD">AUD – Australian Dollar</option>
+          <option value="JPY">JPY – Japanese Yen</option>
+          <option value="CHF">CHF – Swiss Franc</option>
+          <option value="CNY">CNY – Chinese Yuan</option>
+          <option value="INR">INR – Indian Rupee</option>
+          <option value="BRL">BRL – Brazilian Real</option>
+          <option value="KRW">KRW – South Korean Won</option>
+          <option value="RUB">RUB – Russian Ruble</option>
+          <option value="TRY">TRY – Turkish Lira</option>
+          <option value="ZAR">ZAR – South African Rand</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="sats-note">1 BTC = 100,000,000 sats</div>
+
+    <footer>
+      Live prices from CoinGecko • Updates every 15 seconds • 
+      <a href="https://github.com/YOURUSERNAME/bitrate.live" target="_blank">Open Source</a>
+    </footer>
+  </div>
+
+  <script>
+    const cryptoAmount = document.getElementById('cryptoAmount');
+    const unit     = document.getElementById('cryptoUnit');
+    const fiat     = document.getElementById('fiatAmount');
+    const currency = document.getElementById('fiatCurrency');
+    const swapBtn  = document.getElementById('swapBtn');
+    const leftLbl  = document.getElementById('leftLabel');
+    const rightLbl = document.getElementById('rightLabel');
+
+    let rates = {};
+    let cryptoToFiat = true;
+
+    async function loadRates() {
+      const vs = [...currency.options].map(o => o.value.toLowerCase()).join(',');
+      const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=${vs}`);
+      const data = await res.json();
+      rates = data.bitcoin;
+      convert();
+    }
+
+    function convert() {
+      if (cryptoToFiat) {
+        let btc = unit.value === 'sats' ? (parseFloat(crypto.value) || 0) / 1e8 : (parseFloat(crypto.value) || 0);
+        let rate = rates[currency.value.toLowerCase()];
+        if (rate) fiat.value = (btc * rate).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+      } else {
+        let amount = parseFloat(fiat.value.replace(/,/g,'')) || 0;
+        let rate = rates[currency.value.toLowerCase()];
+        if (rate) {
+          let btc = amount / rate;
+          if (unit.value === 'sats') crypto.value = Math.round(btc * 1e8);
+          else crypto.value = btc.toFixed(8).replace(/0+$/,'') || '0';
+        }
+      }
+    }
+
+    swapBtn.onclick = () => {
+      cryptoToFiat = !cryptoToFiat;
+      leftLbl.textContent  = cryptoToFiat ? 'You send' : 'You receive';
+      rightLbl.textContent = cryptoToFiat ? 'You receive' : 'You send';
+      crypto.toggleAttribute('readonly', !cryptoToFiat);
+      fiat.toggleAttribute('readonly', cryptoToFiat);
+      convert();
+    };
+
+    crypto.oninput = convert;
+    unit.onchange = convert;
+    currency.onchange = () => { loadRates(); };
+
+    loadRates();
+    setInterval(loadRates, 15000);
+  </script>
+</body>
+</html>
