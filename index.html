@@ -85,17 +85,32 @@
       background: var(--accent-dark);
       transform: rotate(180deg);
     }
-    footer {
-      text-align: center;
-      margin-top: 2rem;
-      font-size: 0.9rem;
-      opacity: 0.7;
+    .below-converter {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 1rem;
     }
     .sats-note {
       font-size: 0.85rem;
       opacity: 0.8;
       text-align: center;
-      margin-top: 0.5rem;
+      flex: 1;
+      transition: margin 0.3s ease;
+    }
+    .sats-note.left-aligned {
+      margin-right: auto;
+      margin-left: 0;
+    }
+    .sats-note.right-aligned {
+      margin-left: auto;
+      margin-right: 0;
+    }
+    footer {
+      text-align: center;
+      margin-top: 2rem;
+      font-size: 0.9rem;
+      opacity: 0.7;
     }
   </style>
 </head>
@@ -121,7 +136,7 @@
       <!-- Right side -->
       <div class="input-group">
         <label for="fiatAmount">You receive</label>
-        <input type="text" id="fiatAmount" readonly placeholder="0.00"/>
+        <input type="number" id="fiatAmount" readonly placeholder="0.00" step="0.01"/>
         <select id="fiatCurrency">
           <option value="USD">USD – US Dollar</option>
           <option value="EUR">EUR – Euro</option>
@@ -142,12 +157,14 @@
       </div>
     </div>
 
-    <div class="sats-note">
-      1 BTC = 100,000,000 sats
+    <div class="below-converter">
+      <div class="sats-note left-aligned">
+        1 BTC = 100,000,000 sats
+      </div>
     </div>
 
     <footer>
-      Live prices from CoinGecko • Updated every 15 seconds • No tracking • <a href="https://github.com/YOURUSERNAME/bitrate.live" style="color:var(--accent)">Open Source</a>
+      Live prices from CoinGecko • Updated every 15 seconds • No tracking • <a href="https://github.com/WhitepaperInteractive/BitRate" style="color:var(--accent)">Open Source</a>
     </footer>
   </div>
 
@@ -157,9 +174,10 @@
     const fiatAmount = document.getElementById('fiatAmount');
     const fiatCurrency = document.getElementById('fiatCurrency');
     const swapBtn = document.getElementById('swapBtn');
+    const satsNote = document.querySelector('.sats-note');
 
     let rates = {};
-    let isCryptoToFiat = true; // true = crypto → fiat, false = fiat → crypto
+    let isCryptoToFiat = true; // true = crypto to fiat, false = fiat to crypto
 
     // Fetch prices from CoinGecko (free, no key needed)
     async function fetchRates() {
@@ -171,62 +189,86 @@
         rates = data.bitcoin;
         updateConversion();
       } catch (e) {
-        fiatAmount.value = "Error loading rates";
+        getOutputElement().value = "Error loading rates";
       }
     }
 
+    function getInputElement() {
+      return isCryptoToFiat ? cryptoAmount : fiatAmount;
+    }
+
+    function getOutputElement() {
+      return isCryptoToFiat ? fiatAmount : cryptoAmount;
+    }
+
     function updateConversion() {
-      const amount = parseFloat(cryptoAmount.value) || 0;
+      const inputEl = getInputElement();
+      const outputEl = getOutputElement();
+      const inputVal = parseFloat(inputEl.value) || 0;
       const currency = fiatCurrency.value.toLowerCase();
       const rate = rates[currency];
 
       if (!rate) {
-        fiatAmount.value = "—";
+        outputEl.value = "—";
         return;
       }
 
       let result;
-
       if (isCryptoToFiat) {
-        // Crypto → Fiat
-        const btc = cryptoUnit.value === 'sats' ? amount / 100000000 : amount;
+        // Crypto to Fiat
+        const btc = cryptoUnit.value === 'sats' ? inputVal / 100000000 : inputVal;
         result = (btc * rate).toFixed(2);
-        fiatAmount.value = parseFloat(result).toLocaleString();
+        outputEl.value = parseFloat(result).toLocaleString();
       } else {
-        // Fiat → Crypto (sats or BTC)
-        const btc = amount / rate;
+        // Fiat to Crypto
+        const btc = inputVal / rate;
         if (cryptoUnit.value === 'sats') {
           result = Math.round(btc * 100000000);
-          cryptoAmount.value = result;
+          outputEl.value = result;
         } else {
-          cryptoAmount.value = btc.toFixed(8);
+          outputEl.value = btc.toFixed(8);
         }
       }
     }
 
     // Swap direction
-    swapBtn.addEventListener('click', () => {
-      isCryptoToFiat = !isCryptoToFiat;
-      // Swap labels
-      document.querySelectorAll('.input-group label')[0].textContent = isCryptoToFiat ? 'You send' : 'You receive';
-      document.querySelectorAll('.input-group label')[1].textContent = isCryptoToFiat ? 'You receive' : 'You send';
+    swapBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      // Store current values before swap
+      const currentCryptoVal = parseFloat(cryptoAmount.value) || 0;
+      const currentFiatVal = parseFloat(fiatAmount.value.replace(/,/g, '')) || 0;
 
-      // Make the correct input readonly
+      // Flip direction
+      isCryptoToFiat = !isCryptoToFiat;
+
+      // Swap labels
+      const leftLabel = document.querySelectorAll('.input-group label')[0];
+      const rightLabel = document.querySelectorAll('.input-group label')[1];
+      [leftLabel.textContent, rightLabel.textContent] = [rightLabel.textContent, leftLabel.textContent];
+
+      // Flip readonly and set input value from previous output
       if (isCryptoToFiat) {
         cryptoAmount.removeAttribute('readonly');
         fiatAmount.setAttribute('readonly', true);
+        // Previous fiat becomes new crypto input? No—for pure swap, set to previous crypto equiv, but since direction flipped, better to set input to 0 or previous input equiv. Here, reset input to previous input's equiv in new units? Wait, simple: set new input to previous input value (but units may differ). For now, set to 0 to avoid confusion; adjust if needed.
+        cryptoAmount.value = currentCryptoVal; // Keep same number, let user adjust
       } else {
         fiatAmount.removeAttribute('readonly');
         cryptoAmount.setAttribute('readonly', true);
-        // Move current fiat value to input
-        const currentFiat = parseFloat(fiatAmount.value.replace(/,/g,'')) || 0;
-        fiatAmount.value = currentFiat.toFixed(2);
+        fiatAmount.value = currentFiatVal.toFixed(2);
       }
-      updateConversion();
+
+      // Swap sats note position visually
+      satsNote.classList.toggle('left-aligned');
+      satsNote.classList.toggle('right-aligned');
+
+      // Trigger update after swap (delayed to avoid event conflicts)
+      setTimeout(updateConversion, 10);
     });
 
-    // Event listeners
-    cryptoAmount.addEventListener('input', updateConversion);
+    // Event listeners (bidirectional)
+    cryptoAmount.addEventListener('input', () => { if (isCryptoToFiat) updateConversion(); });
+    fiatAmount.addEventListener('input', () => { if (!isCryptoToFiat) updateConversion(); });
     cryptoUnit.addEventListener('change', updateConversion);
     fiatCurrency.addEventListener('change', fetchRates);
 
